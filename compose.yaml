@@ -1,0 +1,31 @@
+name: aspire-otel-demo
+
+services:
+  aspire-dashboard:
+    image: ${ASPIRE_DASHBOARD_IMAGE}
+    environment:
+      # Demo only: no login token for the UI, no API key on the OTLP endpoint.
+      DASHBOARD__FRONTEND__AUTHMODE: Unsecured
+      DASHBOARD__OTLP__AUTHMODE: Unsecured
+    ports:
+      - "${ASPIRE_UI_PORT}:18888" # dashboard UI
+    # The OTLP endpoint (18889 gRPC) is only reachable on the compose network,
+    # so all telemetry has to go through the collector.
+
+  otel-collector:
+    image: ${OTEL_COLLECTOR_IMAGE}
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector/config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "${COLLECTOR_GRPC_PORT}:4317"   # OTLP gRPC
+      - "${COLLECTOR_HTTP_PORT}:4318"   # OTLP HTTP
+      - "${COLLECTOR_HEALTH_PORT}:13133" # health check
+    depends_on:
+      - aspire-dashboard
+
+  telemetrygen:
+    image: ${TELEMETRYGEN_IMAGE}
+    profiles: ["tools"] # only started by `docker compose run`
+    depends_on:
+      - otel-collector

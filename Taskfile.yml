@@ -1,0 +1,87 @@
+version: "3"
+
+dotenv: [".env"]
+
+vars:
+  COLLECTOR: otel-collector:4317
+  SERVICE: '{{.SERVICE | default "telemetrygen-demo"}}'
+  DURATION: '{{.DURATION | default "10s"}}'
+  RATE: '{{.RATE | default "5"}}'
+  GEN: docker compose run --rm telemetrygen
+
+tasks:
+  default:
+    desc: List tasks
+    cmds:
+      - task --list
+    silent: true
+
+  up:
+    desc: Start the Aspire dashboard and the OTel collector
+    cmds:
+      - docker compose up -d --wait aspire-dashboard otel-collector
+      - echo "Aspire dashboard -> http://localhost:{{.ASPIRE_UI_PORT}}"
+    silent: false
+
+  down:
+    desc: Stop and remove everything
+    cmds:
+      - docker compose --profile tools down --remove-orphans
+
+  restart:
+    desc: Recreate the stack (e.g. after editing the collector config)
+    cmds:
+      - task: down
+      - task: up
+
+  logs:
+    desc: Follow the collector logs
+    cmds:
+      - docker compose logs -f otel-collector
+
+  ps:
+    desc: Show running containers
+    cmds:
+      - docker compose ps
+
+  open:
+    desc: Open the Aspire dashboard in a browser
+    cmds:
+      - open http://localhost:{{.ASPIRE_UI_PORT}}
+
+  gen:traces:
+    desc: "Send traces through the collector (vars: SERVICE, DURATION, RATE)"
+    cmds:
+      - >-
+        {{.GEN}} traces
+        --otlp-endpoint {{.COLLECTOR}} --otlp-insecure
+        --service {{.SERVICE}} --duration {{.DURATION}} --rate {{.RATE}}
+        --child-spans 3
+
+  gen:metrics:
+    desc: "Send metrics through the collector (vars: SERVICE, DURATION, RATE)"
+    cmds:
+      - >-
+        {{.GEN}} metrics
+        --otlp-endpoint {{.COLLECTOR}} --otlp-insecure
+        --service {{.SERVICE}} --duration {{.DURATION}} --rate {{.RATE}}
+
+  gen:logs:
+    desc: "Send logs through the collector (vars: SERVICE, DURATION, RATE)"
+    cmds:
+      - >-
+        {{.GEN}} logs
+        --otlp-endpoint {{.COLLECTOR}} --otlp-insecure
+        --service {{.SERVICE}} --duration {{.DURATION}} --rate {{.RATE}}
+        --body "hello from telemetrygen"
+
+  gen:
+    desc: Send traces, metrics and logs in parallel
+    deps: [gen:traces, gen:metrics, gen:logs]
+
+  demo:
+    desc: Start the stack, generate all three signals, print the dashboard URL
+    cmds:
+      - task: up
+      - task: gen
+      - echo "Done. Open http://localhost:{{.ASPIRE_UI_PORT}} to see traces, metrics and structured logs."
